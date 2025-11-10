@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from models import db, Product, Order, OrderItem
 import os
+from sqlalchemy import inspect
 
 # --------------------
 # App & DB Setup
@@ -10,7 +11,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'database.db')
 print("Database path:", DB_PATH)  # Debug to ensure correct path
 
-# If you moved index.html to root, static_folder='.'
+# Static files in root since index.html is moved
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -129,7 +130,8 @@ def seed_data():
 @app.route('/api/debug', methods=['GET'])
 def debug_db():
     try:
-        tables = db.engine.table_names()
+        inspector = inspect(db.engine)
+        tables = inspector.get_table_names()
         return jsonify({"tables": tables})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
