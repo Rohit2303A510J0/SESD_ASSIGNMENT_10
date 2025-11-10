@@ -3,10 +3,15 @@ from flask_cors import CORS
 from models import db, Product, Order, OrderItem
 import os
 
+# --------------------
+# App & DB Setup
+# --------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'database.db')
+print("Database path:", DB_PATH)  # Debug to ensure correct path
 
-app = Flask(__name__, static_folder='../client', static_url_path='')
+# If you moved index.html to root, static_folder='.'
+app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 CORS(app)
@@ -15,10 +20,12 @@ db.init_app(app)
 
 STATUS_FLOW = ['Pending', 'Packed', 'Shipped', 'Out for delivery', 'Delivered']
 
+# --------------------
+# Routes
+# --------------------
 @app.route('/')
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
-
 
 @app.route('/api/products', methods=['GET'])
 def get_products():
@@ -27,7 +34,6 @@ def get_products():
         return jsonify([p.to_dict() for p in prods])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/api/order', methods=['POST'])
 def create_order():
@@ -52,12 +58,12 @@ def create_order():
     for it in items:
         prod = Product.query.get(it['product_id'])
         prod.inventory -= it['quantity']
-        oi = OrderItem(order_id=order.id, product_id=prod.id, quantity=it['quantity'], unit_price=prod.price)
+        oi = OrderItem(order_id=order.id, product_id=prod.id,
+                       quantity=it['quantity'], unit_price=prod.price)
         db.session.add(oi)
 
     db.session.commit()
     return jsonify({'order_id': order.id, 'status': order.status}), 201
-
 
 @app.route('/api/track/<int:order_id>', methods=['GET'])
 def track_order(order_id):
@@ -65,7 +71,6 @@ def track_order(order_id):
     if not order:
         return jsonify({'error': 'Order not found'}), 404
     return jsonify(order.to_dict())
-
 
 @app.route('/api/payment', methods=['POST'])
 def payment():
@@ -78,7 +83,24 @@ def payment():
     db.session.commit()
     return jsonify({'order_id': order.id, 'status': order.status})
 
+@app.route('/api/advance/<int:order_id>', methods=['POST'])
+def advance_status(order_id):
+    order = Order.query.get(order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+    try:
+        idx = STATUS_FLOW.index(order.status)
+        if idx < len(STATUS_FLOW) - 1:
+            order.status = STATUS_FLOW[idx + 1]
+            db.session.commit()
+    except ValueError:
+        order.status = 'Pending'
+        db.session.commit()
+    return jsonify({'order_id': order.id, 'status': order.status})
 
+# --------------------
+# Seed / DB Helpers
+# --------------------
 def seed_data():
     default_inventory = 50
     products = Product.query.all()
@@ -101,11 +123,24 @@ def seed_data():
         db.session.commit()
         print("🔁 Inventory reset if needed.")
 
+# --------------------
+# Debug Route
+# --------------------
+@app.route('/api/debug', methods=['GET'])
+def debug_db():
+    try:
+        tables = db.engine.table_names()
+        return jsonify({"tables": tables})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+# --------------------
+# Main
+# --------------------
 if __name__ == "__main__":
     with app.app_context():
-        db.create_all()
-        seed_data()
+        db.create_all()   # Ensure all tables exist
+        seed_data()       # Seed default products if needed
 
     print("🚀 Server running on http://0.0.0.0:5000")
     app.run(host="0.0.0.0", port=5000)
