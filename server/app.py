@@ -9,9 +9,12 @@ from sqlalchemy import inspect
 # --------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'database.db')
-print("Database path:", DB_PATH)  # Debug to ensure correct path
 
-# Static files in root since index.html is moved
+# Remove old DB if exists (so tables are recreated)
+if os.path.exists(DB_PATH):
+    os.remove(DB_PATH)
+
+# Flask app
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -59,8 +62,12 @@ def create_order():
     for it in items:
         prod = Product.query.get(it['product_id'])
         prod.inventory -= it['quantity']
-        oi = OrderItem(order_id=order.id, product_id=prod.id,
-                       quantity=it['quantity'], unit_price=prod.price)
+        oi = OrderItem(
+            order_id=order.id,
+            product_id=prod.id,
+            quantity=it['quantity'],
+            unit_price=prod.price
+        )
         db.session.add(oi)
 
     db.session.commit()
@@ -105,9 +112,7 @@ def advance_status(order_id):
 def seed_data():
     default_inventory = 50
     products = Product.query.all()
-
     if not products:
-        print("🟡 Seeding database with new products...")
         sample_products = [
             Product(name="Laptop", price=60000, inventory=default_inventory),
             Product(name="Smartphone", price=15000, inventory=default_inventory),
@@ -116,13 +121,11 @@ def seed_data():
         ]
         db.session.add_all(sample_products)
         db.session.commit()
-        print("✅ Seeding complete!")
     else:
         for p in products:
             if p.inventory < default_inventory:
                 p.inventory = default_inventory
         db.session.commit()
-        print("🔁 Inventory reset if needed.")
 
 # --------------------
 # Debug Route
@@ -144,5 +147,4 @@ if __name__ == "__main__":
         db.create_all()   # Ensure all tables exist
         seed_data()       # Seed default products if needed
 
-    print("🚀 Server running on http://0.0.0.0:5000")
     app.run(host="0.0.0.0", port=5000)
