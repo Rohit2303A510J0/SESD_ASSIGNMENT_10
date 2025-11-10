@@ -19,10 +19,15 @@ STATUS_FLOW = ['Pending', 'Packed', 'Shipped', 'Out for delivery', 'Delivered']
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
 
+
 @app.route('/api/products', methods=['GET'])
 def get_products():
-    prods = Product.query.all()
-    return jsonify([p.to_dict() for p in prods])
+    try:
+        prods = Product.query.all()
+        return jsonify([p.to_dict() for p in prods])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/order', methods=['POST'])
 def create_order():
@@ -53,12 +58,14 @@ def create_order():
     db.session.commit()
     return jsonify({'order_id': order.id, 'status': order.status}), 201
 
+
 @app.route('/api/track/<int:order_id>', methods=['GET'])
 def track_order(order_id):
     order = Order.query.get(order_id)
     if not order:
         return jsonify({'error': 'Order not found'}), 404
     return jsonify(order.to_dict())
+
 
 @app.route('/api/payment', methods=['POST'])
 def payment():
@@ -71,57 +78,34 @@ def payment():
     db.session.commit()
     return jsonify({'order_id': order.id, 'status': order.status})
 
-@app.route('/api/advance/<int:order_id>', methods=['POST'])
-def advance_status(order_id):
-    order = Order.query.get(order_id)
-    if not order:
-        return jsonify({'error': 'Order not found'}), 404
-    try:
-        idx = STATUS_FLOW.index(order.status)
-        if idx < len(STATUS_FLOW) - 1:
-            order.status = STATUS_FLOW[idx + 1]
-            db.session.commit()
-    except ValueError:
-        order.status = 'Pending'
-        db.session.commit()
-    return jsonify({'order_id': order.id, 'status': order.status})
 
 def seed_data():
-    default_inventory = 50  # Inventory will reset to 50 every restart if below this
-
+    default_inventory = 50
     products = Product.query.all()
 
-    if not products:  # No products in DB → first time seed
-        print("Seeding database with initial products...")
+    if not products:
+        print("🟡 Seeding database with new products...")
         sample_products = [
             Product(name="Laptop", price=60000, inventory=default_inventory),
             Product(name="Smartphone", price=15000, inventory=default_inventory),
             Product(name="Headphones", price=2000, inventory=default_inventory),
-            Product(name="Keyboard", price=1200, inventory=default_inventory)
+            Product(name="Keyboard", price=1200, inventory=default_inventory),
         ]
         db.session.add_all(sample_products)
         db.session.commit()
-        print("Seeding complete with default inventory!")
+        print("✅ Seeding complete!")
     else:
-        # Products exist ->Reset inventory if low or zero
-        updated = False
         for p in products:
             if p.inventory < default_inventory:
-                print(f"🔁 Resetting inventory for {p.name} ({p.inventory} → {default_inventory})")
                 p.inventory = default_inventory
-                updated = True
-        
-        if updated:
-            db.session.commit()
-            print("Inventory reset complete!")
-        else:
-            print("Inventory already sufficient. No changes needed.")
-
+        db.session.commit()
+        print("🔁 Inventory reset if needed.")
 
 
 if __name__ == "__main__":
     with app.app_context():
-        db.create_all()   # Creates DB and tables if not exists
-        seed_data()       # Auto insert products only first time
-    app.run(host="0.0.0.0", port=5000)
+        db.create_all()
+        seed_data()
 
+    print("🚀 Server running on http://0.0.0.0:5000")
+    app.run(host="0.0.0.0", port=5000)
