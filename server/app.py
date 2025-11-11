@@ -7,16 +7,16 @@ from sqlalchemy import inspect
 # --------------------
 # App & DB Setup
 # --------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, 'database.db')
-
-# Remove old DB if exists (so tables are recreated)
-if os.path.exists(DB_PATH):
-    os.remove(DB_PATH)
 
 # Flask app
 app = Flask(__name__, static_folder='.', static_url_path='')
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
+
+# ✅ Use Render PostgreSQL Database
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set in environment variables!")
+
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 CORS(app)
 
@@ -111,7 +111,14 @@ def advance_status(order_id):
 # --------------------
 def seed_data():
     default_inventory = 50
+
+    # ✅ Reset inventory to 50 on each app run for testing
     products = Product.query.all()
+    for p in products:
+        p.inventory = default_inventory
+    db.session.commit()
+
+    # If no products exist, create them
     if not products:
         sample_products = [
             Product(name="Laptop", price=60000, inventory=default_inventory),
@@ -120,11 +127,6 @@ def seed_data():
             Product(name="Keyboard", price=1200, inventory=default_inventory),
         ]
         db.session.add_all(sample_products)
-        db.session.commit()
-    else:
-        for p in products:
-            if p.inventory < default_inventory:
-                p.inventory = default_inventory
         db.session.commit()
 
 # --------------------
@@ -144,7 +146,7 @@ def debug_db():
 # --------------------
 if __name__ == "__main__":
     with app.app_context():
-        db.create_all()   # Ensure all tables exist
-        seed_data()       # Seed default products if needed
+        db.create_all()  # ✅ Creates table if not exists
+        seed_data()      # ✅ Resets inventory + seeds products
 
     app.run(host="0.0.0.0", port=5000)
