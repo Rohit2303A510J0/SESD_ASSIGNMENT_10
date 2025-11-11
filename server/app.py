@@ -7,21 +7,22 @@ from sqlalchemy import inspect
 # --------------------
 # App & DB Setup
 # --------------------
-
-# Flask app
 app = Flask(__name__, static_folder='.', static_url_path='')
 
-# ✅ Use Render PostgreSQL Database
+# ✅ Render PostgreSQL DB
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL is not set in environment variables!")
+    raise RuntimeError("❌ DATABASE_URL not set in Render Environment Variables!")
+
+# ✅ Fix for Render Postgres URL format if it starts with "postgres://"
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 CORS(app)
 
 db.init_app(app)
-
 STATUS_FLOW = ['Pending', 'Packed', 'Shipped', 'Out for delivery', 'Delivered']
 
 # --------------------
@@ -112,14 +113,8 @@ def advance_status(order_id):
 def seed_data():
     default_inventory = 50
 
-    # ✅ Reset inventory to 50 on each app run for testing
-    products = Product.query.all()
-    for p in products:
-        p.inventory = default_inventory
-    db.session.commit()
-
-    # If no products exist, create them
-    if not products:
+    # Create products if table empty
+    if not Product.query.first():
         sample_products = [
             Product(name="Laptop", price=60000, inventory=default_inventory),
             Product(name="Smartphone", price=15000, inventory=default_inventory),
@@ -128,6 +123,11 @@ def seed_data():
         ]
         db.session.add_all(sample_products)
         db.session.commit()
+
+    # Reset inventory for testing every deploy
+    for p in Product.query.all():
+        p.inventory = default_inventory
+    db.session.commit()
 
 # --------------------
 # Debug Route
@@ -142,11 +142,11 @@ def debug_db():
         return jsonify({"error": str(e)}), 500
 
 # --------------------
-# Main
+# Run App
 # --------------------
-if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()  # ✅ Creates table if not exists
-        seed_data()      # ✅ Resets inventory + seeds products
+with app.app_context():
+    db.create_all()  # ✅ Create tables if not exist
+    seed_data()      # ✅ Add products and reset inventory
 
-    app.run(host="0.0.0.0", port=5000)
+if __name__ == "__main__":
+    app.run()
